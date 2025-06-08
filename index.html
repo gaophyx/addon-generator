@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Bedrock Addon Generator</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+</head>
+<body>
+
+  <h2>Generate Bedrock Addon</h2>
+
+  <label for="title">Pack Title:</label><br>
+  <input type="text" id="title" placeholder="My Addon"><br><br>
+
+  <label for="description">Description:</label><br>
+  <textarea id="description" placeholder="Enter description here..."></textarea><br><br>
+
+  <label for="usesScripts">Uses Scripts?</label>
+  <select id="usesScripts">
+    <option value="no">No</option>
+    <option value="yes">Yes</option>
+  </select><br><br>
+
+  <button onclick="generateAddon()">Download Addon</button>
+
+  <script>
+    async function generateAddon() {
+      const title = document.getElementById("title").value.trim();
+      const description = document.getElementById("description").value.trim();
+      const usesScripts = document.getElementById("usesScripts").value === "yes";
+
+      if (!title) {
+        alert("Please enter a title for the pack.");
+        return;
+      }
+
+      const zip = new JSZip();
+      const version = [1, 0, 0];
+      const engineVersion = [1, 21, 80];
+
+      // Generate UUIDs
+      const uuid = () => crypto.randomUUID();
+      const uuid1 = uuid(); // BP header
+      const uuid2 = uuid(); // BP module
+      const uuid3 = uuid(); // RP header
+      const uuid4 = uuid(); // RP module
+
+      // Create folders
+      const bpPath = `${title} BP`;
+      const rpPath = `${title} RP`;
+      const behavior = zip.folder(bpPath);
+      const resource = zip.folder(rpPath);
+
+      // Build manifest for behavior pack
+      let bpManifest;
+      if (usesScripts) {
+        bpManifest = {
+          format_version: 2,
+          header: {
+            name: `${title} BP`,
+            description: description,
+            min_engine_version: engineVersion,
+            uuid: uuid1,
+            version: version
+          },
+          modules: [{
+            type: "script",
+            language: "javascript",
+            entry: "scripts/main.js",
+            uuid: uuid2,
+            version: version
+          }],
+          dependencies: [
+            {
+              module_name: "@minecraft/server",
+              version: "1.19.0"
+            },
+            {
+              uuid: uuid3,
+              version: version
+            }
+          ],
+          capabilities: ["script_eval"],
+          metadata: {
+            product_type: "addon"
+          }
+        };
+      } else {
+        bpManifest = {
+          format_version: 2,
+          header: {
+            name: `${title} BP`,
+            description: description,
+            min_engine_version: engineVersion,
+            uuid: uuid1,
+            version: version
+          },
+          modules: [{
+            type: "data",
+            uuid: uuid2,
+            version: version
+          }],
+          dependencies: [{
+            uuid: uuid3,
+            version: version
+          }]
+        };
+      }
+
+      // Build manifest for resource pack
+      const rpManifest = {
+        format_version: 2,
+        header: {
+          name: `${title} RP`,
+          description: description,
+          min_engine_version: engineVersion,
+          uuid: uuid3,
+          version: version
+        },
+        modules: [{
+          type: "resources",
+          uuid: uuid4,
+          version: version
+        }],
+        dependencies: [{
+          uuid: uuid1,
+          version: version
+        }]
+      };
+
+      // Write manifest files
+      function formatManifestClean(manifest) {
+        let json = JSON.stringify(manifest, null, 2);
+
+        json = json.replace(/"version": \[\s*(\d+),\s*(\d+),\s*(\d+)\s*\]/g, '"version": [$1, $2, $3]');
+        json = json.replace(/"min_engine_version": \[\s*(\d+),\s*(\d+),\s*(\d+)\s*\]/g, '"min_engine_version": [$1, $2, $3]');
+
+        return json;
+      }
+
+      behavior.file("manifest.json", formatManifestClean(bpManifest));
+      resource.file("manifest.json", formatManifestClean(rpManifest));
+
+
+      if (usesScripts) {
+        behavior.folder("scripts").file("main.js", `import { world } from "@minecraft/server";\nworld.sendMessage("Hello, World");`);
+      }
+
+      // Generate ZIP and trigger download
+      const blob = await zip.generateAsync({ type: "blob" });
+      const a = document.createElement("a");
+      a.href = URL.createObjectURL(blob);
+      a.download = `${title}.zip`;
+      a.click();
+      URL.revokeObjectURL(a.href);
+    }
+  </script>
+
+</body>
+</html>
